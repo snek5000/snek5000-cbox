@@ -191,7 +191,7 @@ User parameter for activation of Selective Frequency Damping method in .usr file
             "sfdreadchpnt": False,
         }
         params.nek.sfd._set_attribs(attribs)
-        params.nek.chkpoint._set_doc(
+        params.nek.sfd._set_doc(
             """
 Runtime parameter section for Selective Frequency Damping module (`KTH toolbox <https://github.com/KTH-Nek5000/KTH_Toolbox>`__)
 

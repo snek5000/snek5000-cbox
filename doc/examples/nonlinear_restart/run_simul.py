@@ -31,6 +31,12 @@ parser.add_argument("--dim", type=int, default=2, help="2D or 3D")
 parser.add_argument("--stretch-factor", type=float, default=0.0, help="Stretch factor")
 
 parser.add_argument(
+    "--enable-sfd",
+    action="store_true",
+    help="Activate Selective Frequency Damping (SFD)",
+)
+
+parser.add_argument(
     "--x-periodicity",
     action="store_true",
     help="Periodic boundary condition in x direction",
@@ -55,7 +61,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--restart-file", help="Path to base state file from SFD simulation"
+    "--restart-file", help="Path to the restart file from another simulation"
 )
 
 
@@ -77,35 +83,49 @@ def main(args):
 
     params.oper.mesh_stretch_factor = args.stretch_factor
     params.oper.aspect_ratio = args.aspect_ratio_y
+    params.oper.enable_sfd = float(args.enable_sfd)
 
     params.oper.nproc_min = 2
     dim = params.oper.dim = args.dim
 
     nx = params.oper.nx = args.nx
     ny = params.oper.ny = int(nx * args.aspect_ratio_y)
-    # nz = params.oper.nz = int(ny / args.aspect_ratio_z)
+    nz = params.oper.nz = int(nx * args.aspect_ratio_z)
 
     order = params.oper.elem.order = args.order
     params.oper.elem.order_out = order
 
-    params.nek.problemtype.equation = "incompLinNS"
-    params.oper.elem.staggered = "auto"
-
     if params.Ra_side > 0 and params.Ra_vert == 0:
         params.output.sub_directory = (
-            f"SW/{dim}D/Lin_sim/Pr_{args.Prandtl:.2f}/asp_{args.aspect_ratio_y:.3f}"
+            f"SW/{dim}D/NL_sim/Pr_{args.Prandtl:.2f}/asp_{args.aspect_ratio_y:.3f}"
         )
-        params.short_name_type_run = f"Lin_asp{args.aspect_ratio_y:.3f}_Ra_s{args.Ra_side:.3e}_Pr{args.Prandtl:.2f}"
+        if params.oper.enable_sfd == 1.0:
+            params.output.sub_directory = (
+                f"SW/{dim}D/SFD/Pr_{args.Prandtl:.2f}/asp_{args.aspect_ratio_y:.3f}"
+            )
+        params.short_name_type_run = (
+            f"asp{args.aspect_ratio_y:.3f}_Ra_s{args.Ra_side:.3e}_Pr{args.Prandtl:.2f}"
+        )
     elif params.Ra_side == 0 and params.Ra_vert > 0:
         params.output.sub_directory = (
-            f"RB/{dim}D/Lin_sim/Pr_{args.Prandtl:.2f}/asp_{args.aspect_ratio_y:.3f}"
+            f"RB/{dim}D/NL_sim/Pr_{args.Prandtl:.2f}/asp_{args.aspect_ratio_y:.3f}"
         )
-        params.short_name_type_run = f"Lin_asp{args.aspect_ratio_y:.3f}_Ra_v{args.Ra_vert:.3e}_Pr{args.Prandtl:.2f}"
+        if params.oper.enable_sfd == 1.0:
+            params.output.sub_directory = (
+                f"RB/{dim}D/SFD/Pr_{args.Prandtl:.2f}/asp_{args.aspect_ratio_y:.3f}"
+            )
+        params.short_name_type_run = (
+            f"asp{args.aspect_ratio_y:.3f}_Ra_v{args.Ra_vert:.3e}_Pr{args.Prandtl:.2f}"
+        )
     elif params.Ra_side > 0 and params.Ra_vert > 0:
         params.output.sub_directory = (
-            f"MC/{dim}D/Lin_sim/Pr_{args.Prandtl:.2f}/asp_{args.aspect_ratio_y:.3f}"
+            f"MC/{dim}D/NL_sim/Pr_{args.Prandtl:.2f}/asp_{args.aspect_ratio_y:.3f}"
         )
-        params.short_name_type_run = f"Lin_asp{args.aspect_ratio_y:.3f}_Ra_s{args.Ra_side:.3e}_Ra_v{args.Ra_vert:.3e}_Pr{args.Prandtl:.2f}"
+        if params.oper.enable_sfd == 1.0:
+            params.output.sub_directory = (
+                f"MC/{dim}D/SFD/Pr_{args.Prandtl:.2f}/asp_{args.aspect_ratio_y:.3f}"
+            )
+        params.short_name_type_run = f"asp{args.aspect_ratio_y:.3f}_Ra_s{args.Ra_side:.3e}_Ra_v{args.Ra_vert:.3e}_Pr{args.Prandtl:.2f}"
 
     params.nek.general.dt = args.dt_max
     params.nek.general.time_stepper = "BDF3"
@@ -113,17 +133,17 @@ def main(args):
     params.nek.general.end_time = args.end_time
     params.nek.general.stop_at = "endTime"
 
+    params.nek.general.start_from = "restart.restart"
+    restart_file = args.restart_file
+
     params.nek.general.write_control = "runTime"
-    params.nek.general.write_interval = args.end_time
-    params.output.phys_fields.write_interval_pert_field = 2000.0
-    params.output.history_points.write_interval = 200.0
+    params.nek.general.write_interval = 20.0
 
     # params.nek.general.target_cfl = 2.0
-    params.nek.general.extrapolation = "standard"
+    params.nek.general.extrapolation = "OIFS"
 
-    params.nek.general.start_from = "base_flow.restart"
-
-    restart_file = args.restart_file
+    params.output.phys_fields.write_interval_pert_field = 10
+    params.output.history_points.write_interval = 200.0
 
     # creation of the coordinates of the points saved by history points
     n1d = 5
@@ -152,8 +172,7 @@ def main(args):
 
     sim = Simul(params)
 
-    copyfile(restart_file, sim.params.output.path_session / "base_flow.restart")
-
+    copyfile(restart_file, sim.params.output.path_session / "restart.restart")
     # sim.output.write_snakemake_config(
     #     custom_env_vars={"MPIEXEC_FLAGS": "--report-pid PID.txt"}
     # )
